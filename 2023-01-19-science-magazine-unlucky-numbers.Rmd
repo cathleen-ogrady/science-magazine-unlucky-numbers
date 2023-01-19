@@ -1,0 +1,312 @@
+---
+title: 'Unlucky numbers: Toy example of investigative bias'
+author: "Cathleen O'Grady"
+date: "2023-01-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+```
+
+In ["Unlucky Numbers"](https://www.science.org/doi/10.1126/science.adg7536) (*Science*, 20 January 2023), an infographic (p. 231) demonstrates the effect of investigative bias in a case of suspected serial murder. By slightly changing how many deaths are attributed to a nurse under suspicion, biases could have a drastic effect on how suspicious a sequence of deaths appears to be.
+
+This script shows how the probabilities in the infographic were calculated. The method is adapted from Appendices 5 and 8 in the 2022 Royal Statistical Society report ["Healthcare serial killer or coincidence? Statistical issues in investigation of suspected medical misconduct."](https://rss.org.uk/news-publication/news-publications/2022/section-group-reports/rss-publishes-report-on-dealing-with-uncertainty-i/) In these appendices, the authors describe hypothetical examples that show how small investigative biases can accumulate.
+
+The *Science* story adapted these examples to create the case of Nurse X, who comes under suspicion of murder after a string of unexplained deaths. The case focuses on "unexplained" deaths because some deaths in a hospital will be unambiguously due to natural causes. Real-world medical murder cases have centred around more ambiguous deaths. For instance, these might be deaths that were unexpected, or that had anomalous autopsy results.
+
+The case of Nurse X is not a real murder case, but draws on real-world investigative mistakes.
+
+# 1. Set up the investigation
+
+This section sets up the basic parameters of the investigation. The script is written so that these basic parameters can easily be changed. This means that it's possible to explore how the results are affected by changing a few crucial variables:
+
+-   The time period of the investigation;
+-   How many shifts Nurse X works;
+-   What proportion of these shifts are in the morning;
+-   How many unexplained deaths occurred over the specified time period, and on what shifts;
+-   How many deaths are reassigned to Nurse X in a biased investigation.
+
+## 1.1 Shift numbers
+
+### Set the investigation time period
+
+Set the time period of the investigation (in years), as well as how many shifts the hospital has per day.
+
+The infographic uses a period of 2 years, with 3 shifts per day at the hospital.
+
+```{r investigation_period}
+n_years = 2
+shifts_per_day = 3
+```
+
+### Set Nurse X's working patterns
+
+Set how many shifts Nurse X works, and what proportion of these shifts are morning shifts.
+
+The infographic uses 250 working days per year for Nurse X, with 80% of her shifts in the morning.
+
+```{r shift_input}
+working_days_per_year = 250
+nurse_x_proportion_morning = 0.8
+```
+
+This is a high number of working days, assuming 50 working weeks of 5 working days each. Some nurses work longer shifts (such as 10 or 12 hours) for fewer days per week (such as 3 or 4 days), but some nurses in some countries do work shorter shifts (8 hours) 5 days per week. A lower number of working days for Nurse X results in lower *p*-values.
+
+### Calculate shift numbers
+
+Based on the parameters set above, we can calculate how many shifts Nurse X worked over the investigation time period:
+
+```{r x_shift_numbers}
+nurse_x_shifts <- working_days_per_year * n_years
+nurse_x_shifts_morning <- nurse_x_proportion_morning * nurse_x_shifts 
+nurse_x_shifts_not_morning <- nurse_x_shifts - nurse_x_shifts_morning 
+```
+
+Nurse X works `r nurse_x_shifts` shifts over `r n_years` years. `r nurse_x_shifts_morning` of these are morning shifts, and `r nurse_x_shifts_not_morning` are shifts at other times.
+
+We can also calculate how many shifts did not have Nurse X present:
+
+```{r other_shift_numbers}
+n_days <- n_years * 365
+not_x_shifts <- n_days * shifts_per_day - nurse_x_shifts
+not_x_shifts_morning <- n_days - nurse_x_shifts_morning
+not_x_shifts_not_morning <- not_x_shifts - not_x_shifts_morning
+```
+
+There are `r not_x_shifts` shifts without Nurse X present. `r not_x_shifts_morning` of these are morning shifts, and `r not_x_shifts_not_morning` are shifts at other times.
+
+## 1.2 Death numbers
+
+### Set the number of deaths on Nurse X's shifts
+
+Set the true number of unexplained deaths that occurred on Nurse X's shifts, in the morning and at other times. This is the number of deaths that would be uncovered by an unbiased investigation.
+
+```{r nurse_x_deaths}
+nurse_x_deaths_morning = 7
+nurse_x_deaths_not_morning = 2
+nurse_x_deaths_unbiased = nurse_x_deaths_morning + nurse_x_deaths_not_morning
+```
+
+`r nurse_x_deaths_unbiased` deaths occur on Nurse X's shifts.
+
+### Set the number of deaths on other shifts
+
+Set the true number of unexplained deaths that occurred during other shifts, in the morning and at other times. This is the number of deaths that would be uncovered by an unbiased investigation.
+
+```{r other_deaths}
+not_x_deaths_morning = 2
+not_x_deaths_not_morning = 4
+not_x_deaths_unbiased = not_x_deaths_morning + not_x_deaths_not_morning
+```
+
+`r not_x_deaths_unbiased` deaths occur on shifts without Nurse X present.
+
+### Set the extent of investigator bias
+
+In an unblinded investigation, deaths may be assigned to Nurse X's shifts because of bias. For instance, investigators might decide that a death occurring shortly after her shift ended was, for all intents and purposes, on Nurse X's shift. Or investigators might reassess deaths on Nurse X's shifts that were not considered suspicious at the time, looking for any evidence that points to the death being less innocent than previously thought.
+
+Set the number of deaths that are assigned to Nurse X in a biased investigation: those that did not occur on her shifts, but are assigned to her shifts anyway (reassigned_to_x), and those that were previously not considered suspicious, but are reconsidered on the basis that Nurse X was present (reassigned_as_suspicious).
+
+Add these deaths to those that truly occurred during Nurse X's shifts, to calculate the total deaths attributed to her in a biased investigation.
+
+The infographic added only two deaths to Nurse X's count in a biased investigation. Because the total number of deaths is low, even a small change like this can have a big impact. If there were hundreds of deaths in each category, small changes in the totals would make less of a difference.
+
+```{r x_deaths_biased}
+reassigned_to_x = 1
+reassigned_as_suspicious = 1
+nurse_x_deaths_biased = nurse_x_deaths_unbiased + 
+  reassigned_to_x + reassigned_as_suspicious
+```
+
+`r nurse_x_deaths_biased` deaths are assigned to Nurse X's shifts in a biased investigation.
+
+If deaths are reassigned to Nurse X's shifts, they are no longer counted in the total for shifts without Nurse X present. Subtract the reassigned deaths from the death count for other shifts:
+
+```{r not_x_deaths_biased}
+not_x_deaths_biased = not_x_deaths_unbiased - reassigned_to_x
+```
+
+`r not_x_deaths_biased` deaths are assigned to other shifts in a biased investigation.
+
+# 2. Investigative pathways
+
+This section uses the investigation parameters defined above to explore how four possible investigative "pathways" would play out.
+
+## 2.1. Severely biased investigation
+
+In this pathway, investigators examine deaths that took place on Nurse X's shifts. Investigators know which nurses were present on each shift, and that Nurse X is under suspicion. With close scrutiny on Nurse X's cases, they are vulnerable to cognitive biases. The total number of deaths they find is the biased death count calculated above.
+
+They do not reassess any deaths that took place without Nurse X present, or compare Nurse X's incident rate with any broader datasets or trends. This may seem like an unrealistically blinkered investigative process, but it is what happened in the early stages of the Lucia de Berk case: After the Juliana Children's Hospital became suspicious, other hospitals where De Berk had worked were asked to examine deaths and resuscitations on or just after De Berk's shifts.
+
+Produce a simple data table showing the deaths on Nurse X's shifts, compared to those on other shifts (in this case, zero):
+
+```{r severely_biased_df}
+severely_biased <- data.frame(deaths = c(nurse_x_deaths_biased, 0),
+                              nurse_present = as.factor(c("yes", "no")),
+                              number_of_shifts = c(nurse_x_shifts, not_x_shifts))
+severely_biased
+```
+
+A statistical model tells us about the relationship between the variables in the table. How strongly are unexplained deaths associated with the presence of Nurse X?
+
+If Nurse X killed the patients, we should find a relationship between her presence and deaths. There should be more deaths when Nurse X is present.
+
+There may be other methods that could reasonably be used here; this method (log-linear model and chi-sq test) is the one used in the RSS report.
+
+```{r severely_biased_model}
+fit_severely_biased <- glm(deaths~nurse_present+offset(log(number_of_shifts)),
+                           family = poisson(),
+                           severely_biased)
+anova_severely_biased <- anova(fit_severely_biased, test='Chisq')
+anova_severely_biased
+```
+
+The prosecutors' hypothesis is that Nurse X killed the patients. The null hypothesis, or defense hypothesis, is that Nurse X did not kill the patients.
+
+The *p*-value in the statistical test tells us the probability of finding the pattern of deaths that we see (or an even more extreme pattern) if the null hypothesis is true. In other words, if Nurse X did not kill the patients, how improbable would this pattern of deaths be?
+
+```{r severely_biased_p}
+anova_severely_biased[[5]][2]
+```
+
+Expressing the *p*-value differently may make it easier to interpret:
+
+```{r severely_biased_1_p}
+severely_biased_p <- 1/anova_severely_biased[[5]][2]
+```
+
+The *p*-value is equivalent to 1 in `r severely_biased_p`.
+
+**With the investigation parameters used in the infographic, this is 1 in 83,685,398.** This figure will be different if you have used different parameters.
+
+The *p*-value tells us about the probability of the pattern of deaths *if* Nurse X is innocent, but it cannot tell us how probable it is *that* Nurse X is innocent. To calculate an approximate probability of her innocence or guilt, we would have to factor in all the other available evidence.
+
+## 2.2 Less biased
+
+In this pathway, investigators reexamine all deaths over the past 2 years, not just those on Nurse X's shifts. But because investigators know which nurses were present on which shift, they are still vulnerable to cognitive biases. The death counts they find for Nurse X and other shifts are the biased death counts calculated above.
+
+```{r less_biased_df}
+less_biased <- data.frame(deaths = c(nurse_x_deaths_biased, not_x_deaths_biased),
+                        nurse_present = as.factor(c("yes", "no")),
+                        number_of_shifts=c(nurse_x_shifts, not_x_shifts))
+
+less_biased
+```
+
+How strongly are unexplained deaths associated with the presence of Nurse X?
+
+```{r less_biased_model}
+fit_less_biased <- glm(deaths~nurse_present+offset(log(number_of_shifts)),
+                           family = poisson(),
+                           less_biased)
+anova_less_biased <- anova(fit_less_biased, test='Chisq')
+anova_less_biased
+```
+
+If Nurse X did not kill the patients, how probable would this pattern of deaths (or a more extreme pattern) be?
+
+```{r less_biased_p}
+anova_less_biased[[5]][2]
+```
+
+Expressing the p-value differently may make it easier to interpret:
+
+```{r less_biased_1_p}
+less_biased_p <- 1/anova_less_biased[[5]][2]
+```
+
+The *p*-value is equivalent to 1 in `r less_biased_p`.
+
+**With the investigation parameters used in the infographic, this is 1 in 10,407.**
+
+## 2.3 Blinded
+
+Blinded investigators are not unintentionally steered by knowing which nurse worked each shift. They find the unbiased death counts calculated above.
+
+```{r blinded_df}
+
+blinded <- data.frame(deaths = c(nurse_x_deaths_unbiased, not_x_deaths_unbiased),
+                      nurse_present = as.factor(c("yes", "no")),
+                      number_of_shifts=c(nurse_x_shifts, not_x_shifts))
+blinded
+
+
+
+```
+
+How strongly are unexplained deaths associated with the presence of Nurse X?
+
+```{r blinded_model}
+fit_blinded <- glm(deaths~nurse_present+offset(log(number_of_shifts)),
+                           family = poisson(),
+                           blinded)
+anova_blinded <- anova(fit_blinded, test='Chisq')
+anova_blinded
+```
+
+If Nurse X did not kill the patients, how probable would this pattern of deaths (or a more extreme pattern) be?
+
+```{r blinded_p}
+anova_blinded[[5]][2]
+```
+
+Expressing the p-value differently may make it easier to interpret:
+
+```{r blinded_1_p}
+blinded_p <- 1/anova_blinded[[5]][2]
+```
+
+The *p*-value is equivalent to 1 in `r blinded_p`.
+
+**With the investigation parameters used in the infographic, this is 1 in 488.**
+
+## 2.4 Careful
+
+In this investigative pathway, not only are investigators blinded, but they try to consider other factors that may influence the pattern of deaths. They know that hospital patients are more likely to die---and have their deaths recorded---in the mornings. They also know that busy morning shifts often have higher staffing rates, meaning that more nurses are present when these deaths are recorded. They find that Nurse X worked mainly in the mornings. They check to see whether accounting for this changes the results.
+
+```{r careful_df}
+
+careful <- data.frame(deaths = c(nurse_x_deaths_morning, nurse_x_deaths_not_morning, 
+                                 not_x_deaths_morning, not_x_deaths_not_morning),
+                      nurse_present = as.factor(c("yes", "yes", "no", "no")),
+                      morning = as.factor(c("yes", "no", "yes", "no")),
+                      number_of_shifts=c(nurse_x_shifts_morning, nurse_x_shifts_not_morning, 
+                                         not_x_shifts_morning, not_x_shifts_not_morning))
+careful
+```
+
+How strongly are unexplained deaths associated with the presence of Nurse X?
+
+```{r careful_model}
+fit_careful <- glm(deaths~morning+nurse_present+offset(log(number_of_shifts)),
+                           family = poisson(),
+                           careful)
+anova_careful <- anova(fit_careful, test='Chisq')
+anova_careful
+```
+
+If Nurse X did not kill the patients, how probable would this pattern of deaths (or a more extreme pattern) be?
+
+```{r careful_p}
+anova_careful[[5]][3]
+```
+
+Expressing the p-value differently may make it easier to interpret:
+
+```{r careful_1_p}
+careful_p <- 1/anova_careful[[5]][3]
+```
+
+The *p*-value is equivalent to 1 in `r careful_p`.
+
+**With the investigation parameters used in the infographic, this is 1 in 45.**
+
+This would still be considered "statistically significant" because the *p*-value is below 1 in 20 (0.05), but it is nonetheless substantially less worrying than the *p*-values generated by other investigative pathways. In a thorough investigation, other factors could be considered, such as how Nurse X's rates compare to other nurses with similar shift patterns; how the hospital's death rates over this period compare to historical trends; and whether there are any other changes at the hospital that should be taken into account, such as increasing admission rates or understaffing.
+
+*This R Markdown file can be downloaded at [github.com/cathleen-ogrady/science-magazine-unlucky-numbers](https://github.com/cathleen-ogrady/science-magazine-unlucky-numbers).*
+
+*Contact the author, Cathleen O'Grady, at unlucky-numbers@cathleenogrady.com.*
+
+*This project is licensed under the under a [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://choosealicense.com/licenses/cc-by-4.0/).*
